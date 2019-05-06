@@ -1,0 +1,317 @@
+“Embedded Value”
+
+import pandas as pd
+import numpy as np
+import xlrd
+import xlsxwriter
+import time
+from datetime import datetime
+start_time = time.time()
+
+
+valuation_date = pd.to_datetime('31-12-2018')
+
+print(' ')
+print('Reading Data...')
+print(' ')
+
+evdata = pd.read_csv("ev_data.csv")
+
+
+wakala_b1 = pd.read_csv("wakala_bonus.csv")
+inv_b2 = pd.read_csv("inv_bonus.csv")
+annuity_table = pd.read_csv("AnnuityFactorPlan1.csv", index_col='Rem_Term')
+bonus_1 = pd.read_csv("bonus1.csv", index_col = 'Year')
+path = "Embedded_Value.xlsx"
+writer = pd.ExcelWriter(path, engine='xlsxwriter')
+
+print(' ')
+print('Data Fetched..')
+print(' ')
+
+mortality = pd.read_csv("Mortality_Rates.csv", index_col='Age')
+alloc_table = pd.read_csv("Allocation_Table.csv", index_col='Year')
+
+
+
+def main():
+
+    #Other Assumptions
+    Past_Unit_Growth_Rate_Assumption = 0.07
+    Annual_Unit_Growth_Rate = 0.12
+    Annual_Investment_Charge = 0.015
+    Mortality_RI_Rates = 0.8
+    Past_PTF_ROR_Assumption = 0.30
+    PTF_GROWTH_RATE = 0.12
+    bid_offer_charge = 0.05
+    annual_imc = 0.015
+
+
+
+    NET_CV = []
+    INV_INCOME = []
+    I_M_C = []
+    END_FUND = []
+    ACCU_Year = []
+    POL_ID = []
+    Bid_Offer = []
+    ALLOCATED_PREMIUM = []
+    START_FUND = []
+    PREMIUM = []
+    MORT_RATE = []
+    MORT_CHARGE = []
+    MORT_CHARGE_PLAN2 = []
+
+    prdinfo = pd.read_csv("D:/Python/PyCharm Projects/EmbeddedValue/prodinfo.csv")
+
+
+    prod_info = pd.DataFrame(prdinfo)
+
+    print(' ')
+    print('Calculating Embedded Value...')
+    print(' ')
+
+    for index, row in evdata.head(10).iterrows():
+        print(index,row)
+
+
+    
+
+
+
+        n = 5
+        product = row['PRDUCT_NAME']
+        prod_code = row['PRODUCT_CODE']
+        gender = row['GENDER']
+        mop = row['POL_MOP']
+        pay_term = row['PAYING_TERM']
+        pol_term = row['POL_TERM']
+        pol_fee = row['POL_FEE']
+        ea = row['Entry Age']
+        sa = row['SA']
+        ptf_rate = row['PTF_RATE']
+        issue_date = pd.to_datetime(row['ISSUANCE_DT'])
+        maturity_age = ea + pol_term
+        pol_row = row['POL_NO']
+        basic_cont = row['BASIC_CONT']
+        cov_multiple = sa/basic_cont
+        trans_date = row['TRANS_DATE']
+        dob = row['DOB']
+        ptf_amount = row['PTF_AMT']
+        total_cont = row['TOTAL_CONT']
+        pol_status = row['POL_STATUS']
+        prem_paid_year = row['POL_PREM_PAID_YEAR']
+        risk_paid_year = row['POL_RISK_PAID_YEAR']
+        cust_dob = row['CUST_DOB']
+        cont_index = row['Cont_Indexation']
+        sob = row['SOB']
+        total = 0.0
+        year = 2018
+
+        mop_dict = {'Year': ['Y', 'H', 'Q', 'M'], 'Year_Value': [1, 2, 4, 12]}
+        date_issue = round((issue_date - valuation_date).days / 365.25)
+        mop_df = pd.DataFrame(mop_dict, index=list('YHQM'))
+
+        bonus_table = {'Year':['5','6','11','15'], 'bonus_1':[0,0,0.05,0.05]}
+        bonus_table1 = pd.DataFrame(bonus_table)
+
+        p_code = prod_code
+        p_code = str(p_code)
+
+
+
+
+     
+        main_cond = prod_info[(prod_info.Product_Code == p_code) & (prod_info.SOB_From.isin([sob]))]
+        
+
+        'Policy Fee Deduction'
+        certfeededtype = main_cond.iloc[0,9]
+
+        cert_fee = pol_fee
+        certificate_fee = np.where(certfeededtype == 'Internal',0,cert_fee * mop_df.loc[mop,'Year_Value'])
+
+        'Mortality Charge Deduction'
+        mort_charge_type = main_cond.iloc[0, 13]
+        
+        in_built_rider_rate = int(main_cond.iloc[0, 16])
+        in_built_rider_SAR = int(0)
+
+
+        cert_annual_index_rate = main_cond.iloc[0, 17]
+
+        loading_on_retakaful = float(main_cond.iloc[0, 18])
+
+        date_diff = int(issue_date.year - valuation_date.year)
+
+        product_type = main_cond.iloc[0,7]
+
+        'Bonus Percentages of PIA'
+
+        bonus_pia10 = main_cond.iloc[0, 35]
+        bonus_pia15 = main_cond.iloc[0, 36]
+        bonus_pia20 = main_cond.iloc[0, 37]
+        bonus_pia25 = main_cond.iloc[0, 38]
+        bonus_pia30 = main_cond.iloc[0, 39]
+        bonus_pia35 = main_cond.iloc[0, 40]
+        bonus_pia40 = main_cond.iloc[0, 41]
+
+        'Commission'
+
+        commission1 = main_cond.iloc[0, 42]
+        commission2 = main_cond.iloc[0, 43]
+        commission3 = main_cond.iloc[0, 44]
+        commission5 = main_cond.iloc[0, 45]
+
+
+
+
+
+
+
+
+        start_fund = 0
+        pia_year = 0
+        start_inv_income = 0
+        start_net_cv = 0
+
+        for i in range(n):
+
+
+
+            check_pay_term = 1
+
+
+
+            age = ea
+
+
+            pif_ror = (np.where(date_diff<0,Past_Unit_Growth_Rate_Assumption,Annual_Unit_Growth_Rate))
+            
+
+
+            ptf_ror = (np.where(date_diff < 0, Past_PTF_ROR_Assumption, PTF_GROWTH_RATE))
+
+            gender_cond = str(np.where(gender == "MALE",'Male','Female'))
+            
+            mort_rate = np.where(mort_charge_type == 'Level Rates', ptf_rate,np.where(mort_charge_type == 'Attained Age',((mortality.loc[age, gender_cond]) * (1 + loading_on_retakaful)), 0))
+
+
+            alloc_cond = int(np.where(pia_year<=6,pia_year,6))
+            
+            prod = str(product)
+
+            mortality_charge = np.where(mort_charge_deduct == 'Internal',0, ((sa*mort_rate/1000)+(in_built_rider_SAR*in_built_rider_rate/1000))*check_pay_term)
+            
+            allocated_premium = (basic_cont - mortality_charge - certificate_fee) * allocation
+
+            mortality_charge = ((sa*mort_rate)/1000)
+            mop_cond = mop_df.loc[mop,'Year_Value']
+
+            certificate_fee = np.where(certfeededtype == 'Internal',0,(cert_fee*(mop_cond)))
+            
+
+
+
+            bonus_two = int(pia_year+1)
+            bonus_two_table = inv_b2.loc[bonus_two+1, 'Investment']
+            
+
+            bonus_one_ap = allocated_premium * bonus_one_table
+
+            bonus_two_pia = start_fund*bonus_two_table
+
+            distributed_surplus = np.where((pia_year-1)==(pay_term),0,0)
+
+
+            bid_offer = (bid_offer_charge * (allocated_premium+bonus_one_ap+bonus_two_pia+distributed_surplus))
+            
+
+
+
+
+
+
+            pol_term_cond = int(np.where((pol_term - pia_year)>40,40,np.where((pol_term - pia_year)<=0,0,(pol_term - pia_year))))
+            
+
+            cov_term_cond = annuity_table.loc[pol_term_cond,'Annuity_factor']
+            
+            #Basic Sum At Risk
+            basic_life_cond = np.where((bas_life_ben) == "SC", sa,
+                                       np.where((bas_life_ben) == "SC - CV", (sa - (in_built_rider_SAR) - (start_fund) - (allocated_premium) * 0.95),
+                                       np.where((bas_life_ben)=="Annuity x 2",cov_term_cond * allocated_premium * 2,
+                                       np.where((bas_life_ben)== "Annuity x 1",cov_term_cond * allocated_premium,0))))
+            
+
+
+            'InBuilt Rider Sum At Risk'
+            inbuilt_rider_SAR_cond = max([np.where(age>in_built_rider_maturity_age,0,
+                                              np.where(in_built_rider=='-Plan2Old',basic_cont*5,
+                                                       np.where(in_built_rider=='-Plan2',sa,
+                                                                np.where(in_built_rider=='-Plan1',basic_cont*pay_term,
+                                                                         np.where(in_built_rider=='-FIB',cov_term_cond*basic_cont,0)))))], default=0)
+
+            mort_charge_deduct_Plan2 = np.where(mort_charge_deduct=="External",(np.where(product == 'PLAN2',((basic_life_cond*mort_rate/1000)+(in_built_rider_rate*inbuilt_rider_SAR_cond/1000)),0)),((basic_life_cond*mort_rate/1000)+(in_built_rider_rate*inbuilt_rider_SAR_cond/1000)))
+
+
+
+            # print(' ')
+            # print('start fund',start_fund)
+            # print('allocated premium',allocated_premium)
+            # print('bonus one ap', bonus_one_ap)
+            # print('bonus two pia', bonus_two_pia)
+            # print('distributed surplus', distributed_surplus)
+            # print('bid offer', bid_offer)
+            # print('mort charge Plan2', mort_charge_deduct_Plan2)
+            # print(' ')
+            net_cv = ((start_fund)+(allocated_premium)+(bonus_one_ap)+(bonus_two_pia)+(distributed_surplus)-(bid_offer)-(mort_charge_deduct_Plan2))
+            
+
+            IMC = (net_cv+inv_income+start_net_cv+start_inv_income)*0.5*annual_imc
+
+            start_inv_income = (inv_income)
+            
+
+            end_fund = (inv_income+net_cv-IMC)
+
+            ACCU_Year.append(year)
+            NET_CV.append(net_cv)
+            INV_INCOME.append(inv_income)
+            I_M_C.append(IMC)
+            END_FUND.append(end_fund)
+            POL_ID.append(pol_row)
+            Bid_Offer.append(bid_offer)
+            ALLOCATED_PREMIUM.append(allocated_premium)
+            START_FUND.append(start_fund)
+            PREMIUM.append(basic_cont)
+            MORT_RATE.append(mort_rate)
+            MORT_CHARGE.append(mortality_charge)
+            MORT_CHARGE_PLAN2.append(mort_charge_deduct_Plan2)
+
+
+            ea += 1
+            pia_year += 1
+            start_fund = end_fund
+            year += 1
+            date_diff += 1
+            start_net_cv = net_cv
+            # print('date difference is', date_diff)
+
+
+    print(' ')
+    print('Updating Results')
+    print(' ')
+
+
+
+
+
+main()
+
+print(' ')
+print('Completed...')
+print(' ')
+
+
+print("--- Embedded Value Completed in %s seconds ---" % (time.time() - start_time))
